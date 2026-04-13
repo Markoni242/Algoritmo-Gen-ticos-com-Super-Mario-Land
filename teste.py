@@ -4,72 +4,112 @@ import random
 # ================= CONFIG =================
 ROM = "mario.gb"
 
-POP_SIZE = 6
-GENES_LENGTH = 100
-GENERATIONS = 5
-MUTATION_RATE = 0.1
+POP_SIZE = 30
+GENES_LENGTH = 200
+GENERATIONS = 400
+MUTATION_RATE = 0.3
 
-ACTIONS = ["a", "left", "right", None]
-
+ACTIONS = [
+    None,
+    "left",
+    "right",
+    "jump"
+]
 
 # ================= INDIVÍDUO =================
 def criar_individuo():
     return [random.choice(ACTIONS) for _ in range(GENES_LENGTH)]
 
+# ================= DETECÇÃO =================
+def perigo_a_frente(pyboy):
+    mario_x = pyboy.memory[0xC202]
+    mario_y = pyboy.memory[0xC201]
+
+    for i in range(10):
+        base = 0xD100 + (i * 0x10)
+
+        obj_x = pyboy.memory[base + 3]
+        obj_y = pyboy.memory[base + 2]
+
+        if 0 < (obj_x - mario_x) < 20:
+            if abs(obj_y - mario_y) < 12:
+                return True
+
+    return False
 
 # ================= FITNESS =================
 def avaliar(individuo):
-    pyboy = PyBoy(ROM, window="SDL2")
+    pyboy = PyBoy(ROM, window="null")
     pyboy.set_emulation_speed(0)
 
     try:
         # iniciar jogo
-        for _ in range(200):
+        for _ in range(150):
             pyboy.tick()
 
         pyboy.button("start")
 
-        for _ in range(50):
+        for _ in range(40):
             pyboy.tick()
 
-        melhor_x = 0
-        i = 0
-
         vida_inicial = pyboy.memory[0xDA15]
+
+        x_inicial = pyboy.memory[0xC202]
+        melhor_x = x_inicial
+
+        i = 0
+        pulo_frames = 0
+        score = 0
 
         while True:
             pyboy.tick()
 
-            # ação (loop circular)
             acao = individuo[i % len(individuo)]
-            if acao:
-                pyboy.button(acao)
+
+            # ================= EXECUÇÃO =================
+            if acao == "left":
+                pyboy.button("left")
+
+            elif acao == "right":
+                pyboy.button("right")
+
+            elif acao == "jump":
+                pulo_frames = 6  # pulo médio
+
+            # segurar pulo
+            if pulo_frames > 0:
+                pyboy.button("a")
+                pulo_frames -= 1
+
+            # ================= ESTADO =================
+            x = pyboy.memory[0xC202]
+
+            # progresso
+            if x > melhor_x:
+                score += (x - melhor_x) * 5
+                melhor_x = x
+
+            # leve recompensa por sobreviver
+            score += 0.05
+
+            # ================= INTELIGÊNCIA (só avaliação) =================
+            if perigo_a_frente(pyboy):
+                if acao == "jump":
+                    score += 2
+                else:
+                    score -= 2
+
+            # ================= MORTE =================
+            if pyboy.memory[0xDA15] < vida_inicial:
+                score -= 500
+                score -= (1000 - melhor_x * 2)
+                break
+
+            # ================= FIM =================
+            if i > 15000:
+                break
 
             i += 1
-
-            # posição X
-            pos_x = pyboy.memory[0xC202]
-            if pos_x > melhor_x:
-                melhor_x = pos_x
-
-            # morreu de verdade
-            vida_atual = pyboy.memory[0xDA15]
-            if vida_atual < vida_inicial:
-                break
-
-            # passou de fase
-            mundo = pyboy.memory[0x982C]
-            fase = pyboy.memory[0x982E]
-
-            if mundo != 1 or fase != 1:
-                melhor_x += 1000
-                break
-
-            # limite de segurança (evita loop infinito)
-            if i > 20000:
-                break
-
-        score = melhor_x
 
     except:
         score = 0
@@ -77,17 +117,14 @@ def avaliar(individuo):
     pyboy.stop()
     return score
 
-
 # ================= GA =================
 def selecionar(pop):
     pop.sort(key=lambda x: x[1], reverse=True)
     return pop[: len(pop)//2]
 
-
 def cruzar(p1, p2):
-    corte = random.randint(0, GENES_LENGTH)
+    corte = random.randint(0, len(p1))
     return p1[:corte] + p2[corte:]
-
 
 def mutar(ind):
     return [
@@ -95,9 +132,11 @@ def mutar(ind):
         for gene in ind
     ]
 
-
-# ================= TREINAMENTO =================
+# ================= TREINO =================
 populacao = [criar_individuo() for _ in range(POP_SIZE)]
+
+melhor_global = -999999
+sem_melhora = 0
 
 for gen in range(GENERATIONS):
     print(f"\n===== Geração {gen} =====")
@@ -107,11 +146,30 @@ for gen in range(GENERATIONS):
     for i, ind in enumerate(populacao):
         fit = avaliar(ind)
         avaliados.append((ind, fit))
-        print(f"Indivíduo {i} -> Fitness: {fit}")
+        print(f"Indivíduo {i} -> {fit}")
+
+    avaliados.sort(key=lambda x: x[1], reverse=True)
+
+    # controle de estagnação
+    if avaliados[0][1] > melhor_global:
+        melhor_global = avaliados[0][1]
+        sem_melhora = 0
+    else:
+        sem_melhora += 1
+
+    print("Melhor da geração:", avaliados[0][1])
+
+    # reset se travar
+    if sem_melhora > 10:
+        print("RESETANDO POPULAÇÃO (stagnation)")
+        populacao = [criar_individuo() for _ in range(POP_SIZE)]
+        sem_melhora = 0
+        continue
 
     selecionados = selecionar(avaliados)
 
-    nova_pop = [ind for ind, _ in selecionados]
+    # elitismo
+    nova_pop = [ind for ind, _ in avaliados[:2]]
 
     while len(nova_pop) < POP_SIZE:
         p1, _ = random.choice(selecionados)
@@ -124,40 +182,40 @@ for gen in range(GENERATIONS):
 
     populacao = nova_pop
 
-
 # ================= MELHOR =================
-avaliados_finais = [(ind, avaliar(ind)) for ind in populacao]
-melhor_ind, melhor_fit = max(avaliados_finais, key=lambda x: x[1])
+melhor_ind = avaliados[0][0]
 
-print("\n===== RESULTADO FINAL =====")
-print("Melhor fitness:", melhor_fit)
-
-
-# ================= VISUAL =================
 print("\nRodando melhor indivíduo...")
 
 pyboy = PyBoy(ROM, window="SDL2")
 
-# iniciar jogo
-for _ in range(200):
+for _ in range(150):
     pyboy.tick()
 
 pyboy.button("start")
 
-for _ in range(50):
+for _ in range(40):
     pyboy.tick()
 
-# executar melhor sequência
 i = 0
+pulo_frames = 0
+
 while True:
     pyboy.tick()
 
     acao = melhor_ind[i % len(melhor_ind)]
-    if acao:
-        pyboy.button(acao)
+
+    if acao == "left":
+        pyboy.button("left")
+
+    elif acao == "right":
+        pyboy.button("right")
+
+    elif acao == "jump":
+        pulo_frames = 6
+
+    if pulo_frames > 0:
+        pyboy.button("a")
+        pulo_frames -= 1
 
     i += 1
-
-    # parar se morrer
-    if pyboy.memory[0xDA15] < pyboy.memory[0xDA15]:
-        break

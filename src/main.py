@@ -1,277 +1,277 @@
-from pyboy import PyBoy
-import random
 import json
 import os
-import signal
-import sys
+import random
+import copy
+from multiprocessing import Pool, cpu_count
+from pyboy import PyBoy, WindowEvent
 
-# ================= CONFIG =================
+# =========================
+# CONFIG
+# =========================
+ACTIONS = ["left", "right", "jump"]
+
+GENERATIONS = 15
+POP_SIZE = 15
+MUTATION_RATE = 0.25
+GENES_LENGTH = 500
+
+MAX_STEPS = 30
+MIN_STEPS = 1
+
+BACKUP = "backup.json"
 ROM = "mario.gb"
 
-POP_SIZE = 30
-GENES_LENGTH = 20
-GENERATIONS = 10
-MUTATION_RATE = 0.25
+# =========================
+# INPUT HELPERS (IMPORTANTE)
+# =========================
+def reset_inputs(pyboy):
+    pyboy.send_input(WindowEvent.RELEASE_ARROW_RIGHT)
+    pyboy.send_input(WindowEvent.RELEASE_ARROW_LEFT)
+    pyboy.send_input(WindowEvent.RELEASE_BUTTON_A)
 
-ACTIONS = [None, "left", "right", "jump"]
+def press_action(pyboy, action):
+    if action == "right":
+        pyboy.send_input(WindowEvent.PRESS_ARROW_RIGHT)
+    elif action == "left":
+        pyboy.send_input(WindowEvent.PRESS_ARROW_LEFT)
+    elif action == "jump":
+        pyboy.send_input(WindowEvent.PRESS_BUTTON_A)
 
-# ================= GLOBAL =================
-melhor_global = -999999
-melhor_ind_global = None
-sem_melhora = 0
+# =========================
+# INDIVIDUO
+# =========================
+class Individuo:
+    def __init__(self, genes=None):
+        self.score = 0
+        if genes is None:
+            self.genes = [Individuo.gene() for _ in range(GENES_LENGTH)]
+        else:
+            self.genes = copy.deepcopy(genes)
 
-mapa_perigo = {}  # memória de mortes
+    @staticmethod
+    def gene():
+        return {
+            "action": random.choice(ACTIONS),
+            "weight": random.randint(MIN_STEPS, MAX_STEPS)
+        }
 
-# ================= SALVAR =================
-def salvar(nome, individuo, fitness):
-    with open(nome, "w") as f:
-        json.dump({
-            "genes": individuo,
-            "fitness": fitness
-        }, f)
+    def mutate(self):
+        for i in range(len(self.genes)):
+            if random.random() < MUTATION_RATE:
+                self.genes[i] = Individuo.gene()
+        return self
 
-# ================= CTRL+C =================
-def sair(sig, frame):
-    print("\nSalvando antes de sair...")
-    if melhor_ind_global:
-        salvar("melhor_individuo.json", melhor_ind_global, melhor_global)
-    sys.exit(0)
+    def _EXECUTE(self, pyboy, avaliar=False):
+        self.score = 0
 
-signal.signal(signal.SIGINT, sair)
+        vida_inicial = pyboy.get_memory_value(0xDA15)
+        melhor_x = pyboy.get_memory_value(0xC202)
 
-# ================= CARREGAR =================
-def carregar_melhor():
-    if os.path.exists("melhor_individuo.json"):
-        with open("melhor_individuo.json", "r") as f:
-            data = json.load(f)
-            print("Carregado melhor indivíduo anterior")
-            return data["genes"], data["fitness"]
-    return None, -999999
+        ultimo_x = melhor_x
+        parado = 0
 
-# ================= INDIVÍDUO =================
-def criar_individuo():
-    return [random.choice(ACTIONS) for _ in range(GENES_LENGTH)]
+        for g in self.genes:
+            reset_inputs(pyboy)
 
-# ================= DETECÇÃO =================
-def perigo_a_frente(pyboy):
-    mario_x = pyboy.memory[0xC202]
-    mario_y = pyboy.memory[0xC201]
+            for _ in range(min(g["weight"], MAX_STEPS)):
+                press_action(pyboy, g["action"])
+                pyboy.tick()
 
-    for i in range(10):
-        base = 0xD100 + (i * 0x10)
-        obj_x = pyboy.memory[base + 3]
-        obj_y = pyboy.memory[base + 2]
+                if not avaliar:
+                    continue
 
-        if 0 < (obj_x - mario_x) < 20:
-            if abs(obj_y - mario_y) < 12:
-                return True
+                x = pyboy.get_memory_value(0xC202)
 
-    return False
+                # progresso
+                if x > melhor_x:
+                    self.score += (x - melhor_x) * 5
+                    melhor_x = x
 
-# ================= FITNESS =================
-def avaliar(individuo):
-    pyboy = PyBoy(ROM, window="null")
+                self.score += 0.05
+
+                # parado
+                if x == ultimo_x:
+                    parado += 1
+                    self.score -= 0.2
+                else:
+                    parado = 0
+
+                ultimo_x = x
+
+                # morte
+                if pyboy.get_memory_value(0xDA15) < vida_inicial:
+                    self.score -= 500
+                    return
+
+                # travado
+                if parado > 80:
+                    self.score -= 50
+                    return
+
+    def _RUNNING(self, pyboy, avaliar=False):
+        # boot
+        for _ in range(100):
+            pyboy.tick()
+
+        pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
+        pyboy.tick()
+        pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
+
+        for _ in range(30):
+            pyboy.tick()
+
+        self._EXECUTE(pyboy, avaliar)
+        pyboy.stop()
+
+    def show(self):
+        pyboy = PyBoy(ROM, window_type="SDL2")
+        pyboy.set_emulation_speed(1)
+        self._RUNNING(pyboy, avaliar=False)
+
+    def avaliar(self):
+        pyboy = PyBoy(ROM, window_type="headless")
+        pyboy.set_emulation_speed(0)
+        self._RUNNING(pyboy, avaliar=True)
+
+# =========================
+# WORKER (MULTIPROCESS)
+# =========================
+def avaliar_worker(genes):
+    ind = Individuo(genes)
+
+    pyboy = PyBoy(ROM, window_type="headless")
     pyboy.set_emulation_speed(0)
 
-    for _ in range(100):
-        pyboy.tick()
+    ind._RUNNING(pyboy, avaliar=True)
 
-    pyboy.button("start")
+    return {
+        "score": ind.score,
+        "genes": ind.genes
+    }
 
-    for _ in range(30):
-        pyboy.tick()
-
-    vida_inicial = pyboy.memory[0xDA15]
-    melhor_x = pyboy.memory[0xC202]
-
-    i = 0
-    pulo_frames = 0
-    score = 0
-    parado = 0
-    ultimo_x = melhor_x
-
-    while True:
-        pyboy.tick()
-
-        acao = individuo[i % len(individuo)]
-
-        # ================= EXECUÇÃO =================
-        if acao == "left":
-            pyboy.button("left")
-
-        elif acao == "right":
-            pyboy.button("right")
-
-        elif acao == "jump":
-            pulo_frames = random.randint(4, 8)  
-
-        if pulo_frames > 0:
-            pyboy.button("a")
-            pulo_frames -= 1
-
-        x = pyboy.memory[0xC202]
-
-        # ================= PROGRESSO =================
-        if x > melhor_x:
-            score += (x - melhor_x) * 5
-            melhor_x = x
-
-        # ================= SOBREVIVÊNCIA =================
-        score += 0.05
-
-        # ================= PARADO =================
-        if x == ultimo_x:
-            parado += 1
-            score -= 0.2
-        else:
-            parado = 0
-
-        ultimo_x = x
-
-        # ================= PERIGO =================
-        if perigo_a_frente(pyboy):
-            if acao == "jump":
-                score += 3
-            else:
-                score -= 3
-
-        # ================= MEMÓRIA DE MORTE =================
-        if x in mapa_perigo:
-            score -= mapa_perigo[x] * 2
-
-        # ================= MORTE =================
-        if pyboy.memory[0xDA15] < vida_inicial:
-            score -= 500
-            mapa_perigo[x] = mapa_perigo.get(x, 0) + 1
-            break
-
-        # ================= TRAVA =================
-        if parado > 80:
-            score -= 50
-            break
-
-        # ================= LIMITE =================
-        if i > 3000:
-            break
-
-        i += 1
-
-    pyboy.stop()
-    return score
-
-# ================= GA =================
-def selecionar(pop):
-    pop.sort(key=lambda x: x[1], reverse=True)
-    return pop[: len(pop)//2]
-
-def cruzar(p1, p2):
-    corte = random.randint(0, len(p1))
-    return p1[:corte] + p2[corte:]
-
-def mutar(ind):
-    return [
-        random.choice(ACTIONS) if random.random() < MUTATION_RATE else g
-        for g in ind
-    ]
-
-# ================= INICIALIZAÇÃO =================
-melhor_salvo, melhor_fit_salvo = carregar_melhor()
-
-if melhor_fit_salvo > melhor_global:
-    melhor_global = melhor_fit_salvo
-    melhor_ind_global = melhor_salvo
-
-populacao = []
-
-for _ in range(POP_SIZE):
-    if melhor_salvo and random.random() < 0.4:
-        populacao.append(melhor_salvo.copy())
-    else:
-        populacao.append(criar_individuo())
-
-# ================= TREINO =================
-for gen in range(GENERATIONS):
-    print(f"\n===== Geração {gen} =====")
+def avaliar_paralelo(populacao):
+    with Pool(min(6, cpu_count())) as p:
+        resultados = p.map(
+            avaliar_worker,
+            [ind.genes for ind in populacao]
+        )
 
     avaliados = []
+    for i, r in enumerate(resultados):
+        ind = Individuo(r["genes"])
+        ind.score = r["score"]
+        avaliados.append(ind)
+        print(f" INDIVIDUO {i}: {ind.score}")
 
-    for i, ind in enumerate(populacao):
-        fit = avaliar(ind)
-        avaliados.append((ind, fit))
-        print(f"{i}: {fit}")
+    return avaliados
 
-    avaliados.sort(key=lambda x: x[1], reverse=True)
+# =========================
+# GA
+# =========================
+class Algorithm:
+    def __init__(self, data):
+        self.score = data['score']
+        self.genes = data['genes']
 
-    melhor_ind = avaliados[0][0]
-    melhor_fit = avaliados[0][1]
+        if self.genes is None:
+            self.populacao = [Individuo() for _ in range(POP_SIZE)]
+        else:
+            self.populacao = [
+                Individuo(self.genes) if i < 2 else Individuo()
+                for i in range(POP_SIZE)
+            ]
 
-    print(" Melhor:", melhor_fit)
+    @staticmethod
+    def select(pop):
+        return pop[:len(pop)//2]
 
-  
-    salvar("backup.json", melhor_ind, melhor_fit)
+    @staticmethod
+    def crossover(p1, p2):
+        corte = random.randint(0, len(p1.genes))
+        genes = p1.genes[:corte] + p2.genes[corte:]
+        return [dict(g) for g in genes]
 
-    
-    if melhor_fit > melhor_global:
-        melhor_global = melhor_fit
-        melhor_ind_global = melhor_ind
+    def training(self):
         sem_melhora = 0
 
-        salvar("melhor_individuo.json", melhor_ind, melhor_fit)
-        print(" Novo melhor salvo!")
+        for g in range(GENERATIONS):
+            print(f"\nGERACAO {g} ----")
 
-    else:
-        sem_melhora += 1
+            avaliados = avaliar_paralelo(self.populacao)
 
-    # reset se travar
-    if sem_melhora > 15:
-        print(" RESET POPULAÇÃO")
-        populacao = [criar_individuo() for _ in range(POP_SIZE)]
-        sem_melhora = 0
-        continue
+            avaliados.sort(key=lambda x: x.score, reverse=True)
 
-    selecionados = selecionar(avaliados)
+            melhor = avaliados[0]
+            print(" -- Melhor:", melhor.score)
 
-    nova_pop = [ind for ind, _ in avaliados[:3]]
+            if melhor.score > self.score:
+                self.score = melhor.score
+                self.genes = copy.deepcopy(melhor.genes)
 
-    while len(nova_pop) < POP_SIZE:
-        p1, _ = random.choice(selecionados)
-        p2, _ = random.choice(selecionados)
+                Application.save({
+                    "score": melhor.score,
+                    "genes": melhor.genes
+                })
 
-        filho = mutar(cruzar(p1, p2))
-        nova_pop.append(filho)
+                sem_melhora = 0
+            else:
+                sem_melhora += 1
 
-    populacao = nova_pop
+            if sem_melhora > 15:
+                print("\nRESET POPULACAO ----")
+                self.populacao = [Individuo() for _ in range(POP_SIZE)]
+                sem_melhora = 0
+            else:
+                selecionados = Algorithm.select(avaliados)
 
-# ================= EXECUÇÃO FINAL =================
-print("\n🎮 Executando melhor indivíduo...")
+                pop = [Individuo(i.genes) for i in avaliados[:2]]
 
-pyboy = PyBoy(ROM, window="SDL2")
+                while len(pop) < POP_SIZE:
+                    p1 = random.choice(selecionados)
+                    p2 = random.choice(selecionados)
 
-for _ in range(100):
-    pyboy.tick()
+                    filho = Individuo(
+                        Algorithm.crossover(p1, p2)
+                    ).mutate()
 
-pyboy.button("start")
+                    pop.append(filho)
 
-for _ in range(30):
-    pyboy.tick()
+                self.populacao = pop
 
-i = 0
-pulo_frames = 0
+    def result(self):
+        if self.genes:
+            Individuo(self.genes).show()
 
-while True:
-    pyboy.tick()
+# =========================
+# APP
+# =========================
+class Application:
+    def __init__(self, algorithm):
+        self.algorithm = algorithm
 
-    acao = melhor_ind_global[i % len(melhor_ind_global)]
+    @staticmethod
+    def load(file=BACKUP):
+        if not os.path.exists(file):
+            return {"score": 0, "genes": None}
 
-    if acao == "left":
-        pyboy.button("left")
-    elif acao == "right":
-        pyboy.button("right")
-    elif acao == "jump":
-        pulo_frames = 6
+        with open(file, "r") as f:
+            return json.load(f)
 
-    if pulo_frames > 0:
-        pyboy.button("a")
-        pulo_frames -= 1
+    @staticmethod
+    def save(data):
+        with open(BACKUP, "w") as f:
+            json.dump(data, f)
 
-    i += 1
+    @staticmethod
+    def start():
+        app = Application(
+            Algorithm(Application.load(BACKUP))
+        )
+        app.algorithm.training()
+        app.algorithm.result()
+
+# =========================
+# RUN (OBRIGAT�RIO WINDOWS)
+# =========================
+if __name__ == "__main__":
+    Application.start()

@@ -9,10 +9,10 @@ import copy
 
 ACTIONS = ["left", "right", "jump"]
 
-GENERATIONS = 5
-POP_SIZE = 10
-MUTATION_RATE = 0.25
-GENES_LENGTH = 500
+GENERATIONS = 10
+POP_SIZE = 50
+MUTATION_RATE = 0.3
+GENES_LENGTH = 1000
 
 MAX_STEPS = 30
 MIN_STEPS = 1
@@ -123,18 +123,18 @@ def run_individual(genes, avaliar=True):
 
             # penalidade leve por ficar parado
             if parado > 10:
-                score -= 1
-            
+                score -= 2
+                
             if g["action"] == "left":
-                score -= 20
+                score -= 25
 
-            score += 0.1
+            score += 1
 
             # =========================
             # MORTE
             # =========================
             if pyboy.get_memory_value(0xDA15) < vida_inicial:
-                score -= 800 # mais forte
+                score -= 800
                 pyboy.stop()
                 return score
 
@@ -210,7 +210,7 @@ def random_individual():
 def training(best, pop):
     stagnation = 0
 
-    for g in range(GENERATIONS):
+    for g in range(GENERATIONS+1):
         print(f"\nGERACAO {g} ----------------")
 
         pop = assess(pop)

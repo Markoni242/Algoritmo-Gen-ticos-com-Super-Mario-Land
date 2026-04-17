@@ -9,8 +9,8 @@ import copy
 
 ACTIONS = ["left", "right", "jump"]
 
-GENERATIONS = 20
-POP_SIZE = 50
+GENERATIONS = 5
+POP_SIZE = 10
 MUTATION_RATE = 0.25
 GENES_LENGTH = 500
 
@@ -112,11 +112,6 @@ def run_individual(genes, avaliar=True):
                 melhor_x = x
 
             # =========================
-            # BONUS POR ESTAR VIVO
-            # =========================
-            score += 0.02
-
-            # =========================
             # DETECCAO DE STALL
             # =========================
             if x <= ultimo_x:
@@ -127,8 +122,13 @@ def run_individual(genes, avaliar=True):
             ultimo_x = x
 
             # penalidade leve por ficar parado
-            if parado > 20:
-                score -= 0.1
+            if parado > 10:
+                score -= 1
+            
+            if g["action"] == "left":
+                score -= 20
+
+            score += 0.1
 
             # =========================
             # MORTE
@@ -141,8 +141,8 @@ def run_individual(genes, avaliar=True):
             # =========================
             # EARLY STOP (TRAVADO)
             # =========================
-            if parado > 120:
-                score -= 200
+            if parado > 80:
+                score -= 300
                 pyboy.stop()
                 return score
 
@@ -256,22 +256,26 @@ def training(best, pop):
 # =========================
 if __name__ == "__main__":
 
-    initial_pop = [
-        random_individual() for _ in range(POP_SIZE-2)
-    ]
-
     data = load()
 
-    initial_pop.append(
-        Individual(
-            1, data["genes"]
+    if ( len(data["genes"]) > 0 ):
+        initial_pop = [
+            random_individual() for _ in range(POP_SIZE-2)
+        ]
+        initial_pop.append(
+            Individual(
+                1, data["genes"]
+            )
         )
-    )
-    initial_pop.append(
-        Individual(
-            1, data["genes"]
+        initial_pop.append(
+            Individual(
+                1, data["genes"]
+            )
         )
-    )
+    else:
+        initial_pop = [
+            random_individual() for _ in range(POP_SIZE)
+        ]
 
     best = training(
         Individual(
@@ -283,4 +287,4 @@ if __name__ == "__main__":
     
     print("\nMELHOR FINAL:", best.score)
 
-    run_individual(data["genes"], avaliar=False)
+    run_individual(best.genes, avaliar=False)

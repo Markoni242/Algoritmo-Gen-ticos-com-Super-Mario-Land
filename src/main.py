@@ -88,6 +88,7 @@ def run_individual(genes, avaliar=True):
     melhor_x = pyboy.get_memory_value(0xC202)
     ultimo_x = melhor_x
 
+    esquerda = 0
     parado = 0
     score = 0
 
@@ -118,14 +119,19 @@ def run_individual(genes, avaliar=True):
                 parado += 1
             else:
                 parado = 0
+                
+            if g["action"] == "left":
+                esquerda += 1
+            else:
+                esquerda = 0
 
             ultimo_x = x
 
             # penalidade leve por ficar parado
             if parado > 10:
                 score -= 2
-                
-            if g["action"] == "left":
+            
+            if esquerda > 10:
                 score -= 25
 
             score += 1

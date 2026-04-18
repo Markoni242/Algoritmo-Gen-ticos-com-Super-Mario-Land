@@ -29,7 +29,8 @@ def init( g : Game  ) -> float:
 
     score = play(
         pyboy,
-        g.boot
+        g.boot,
+        g.assess
     )
 
     stop( pyboy )
@@ -50,7 +51,7 @@ def start( rm: str, wn: str, sp: int, st: str ) -> PyBoy:
     return pyboy
     
 
-def play( pyboy : PyBoy, b : Individuo ) -> float:
+def play( pyboy : PyBoy, b : Individuo, assess : bool ) -> float:
 
     vida_inicial = pyboy.get_memory_value(0xDA15)
     melhor_x = pyboy.get_memory_value(0xC202)
@@ -70,6 +71,9 @@ def play( pyboy : PyBoy, b : Individuo ) -> float:
             step(pyboy, g["action"])
             
             pyboy.tick()
+            
+            if ( not assess ):
+                continue
 
             x = pyboy.get_memory_value(0xC202)
 
@@ -118,7 +122,8 @@ def state( g : Game ) -> None:
     
     play(
         pyboy,
-        g.boot
+        g.boot,
+        g.assess
     )
     
     with open( "./src/state.bin", "wb" ) as file:
@@ -132,17 +137,9 @@ def stop( p : PyBoy ) -> None:
 
 def clear( rom : str ) -> None:
     pyboy = PyBoy(rom, window_type="null")
-    pyboy.set_emulation_speed(0)
-
-    for _ in range(100):
-        pyboy.tick()
-
-    pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
-    pyboy.tick()
-    pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
-
-    for _ in range(30):
-        pyboy.tick()
+    
+    with open( "./state.bin", "rb" ) as file:
+        pyboy.load_state( file )
     
     with open( "./src/state.bin", "wb" ) as file:
         pyboy.save_state( file )

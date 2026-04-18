@@ -13,4 +13,5 @@ class Game:
     speed: int
     show: str
     rom: str
+    assess: bool = True
     

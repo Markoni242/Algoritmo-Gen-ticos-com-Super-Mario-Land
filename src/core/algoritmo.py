@@ -2,11 +2,12 @@
 from multiprocessing import Pool, cpu_count
 from .emulate import init, state
 from .models import *
+from typing import List
 import random
 import json
 import copy
 import os
-from typing import List
+
 
 TOP = 3
 ELITE_SIZE = 2
@@ -14,7 +15,7 @@ EXPLARATION_RATE = 0.1
 POP_SIZE = 20
 GENERATIONS = 20
 MUTATION_RATE = 0.3
-GENES_LENGTH = 500
+GENES_LENGTH = 1000
 MAX_STEPS = 30
 MIN_STEPS = 1
 ACTIONS = [
@@ -52,7 +53,7 @@ def propagation( m: Individuo, i: Individuo ) -> Individuo:
 
     b.score = score
 
-    if ( score > m.score and random.random() < 0.8 ):
+    if ( score > m.score):
         state( g )
         return b
     
@@ -130,13 +131,13 @@ def training( m : Individuo ) -> Individuo:
             key=lambda x: x.score,
             reverse=True
         )
-
+        
         for e in pop[:TOP]:
             m = propagation( m, e )
 
         new_pop = pop[:ELITE_SIZE]
 
-        while len(new_pop) < POP_SIZE - ELITE_SIZE:
+        while len(new_pop) < POP_SIZE:
 
             if random.random() < EXPLARATION_RATE:
 

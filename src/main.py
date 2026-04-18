@@ -16,6 +16,8 @@ def save(data):
 
 if __name__ == "__main__":
  
+    clear("mario.gb")
+ 
     data = load()
     
     mario = training (
@@ -36,6 +38,7 @@ if __name__ == "__main__":
             speed = 1,
             show = "SDL2",
             rom = "mario.gb",
-            state= "./state.bin"
+            state= "./state.bin",
+            assess = False
         )
     )

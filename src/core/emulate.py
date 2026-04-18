@@ -50,7 +50,7 @@ def start( rm: str, wn: str, sp: int, st: str ) -> PyBoy:
     return pyboy
     
 
-def play( pyboy : PyBoy, b : object ) -> float:
+def play( pyboy : PyBoy, b : Individuo ) -> float:
 
     vida_inicial = pyboy.get_memory_value(0xDA15)
     melhor_x = pyboy.get_memory_value(0xC202)
@@ -130,7 +130,7 @@ def state( g : Game ) -> None:
 def stop( p : PyBoy ) -> None:
     p.stop()
 
-def clear( rom ) -> None:
+def clear( rom : str ) -> None:
     pyboy = PyBoy(rom, window_type="null")
     pyboy.set_emulation_speed(0)
 

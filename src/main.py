@@ -19,7 +19,7 @@ if __name__ == "__main__":
     data = load()
     
     mario = training (
-        Mario(
+        Individuo(
             score = data["score"],
             genes = data["genes"]
         )

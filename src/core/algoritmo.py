@@ -6,6 +6,7 @@ import random
 import json
 import copy
 import os
+from typing import List
 
 TOP = 3
 ELITE_SIZE = 2
@@ -35,9 +36,9 @@ def individuo() -> Individuo:
         ]
     )
 
-def propagation( m: Mario, i: Individuo ) -> Mario:
+def propagation( m: Individuo, i: Individuo ) -> Individuo:
     
-    b = Mario( 0, m.genes + i.genes )
+    b = Individuo( 0, m.genes + i.genes )
 
     g = Game(
         boot = b,
@@ -57,7 +58,7 @@ def propagation( m: Mario, i: Individuo ) -> Mario:
     
     return m
 
-def worker( p ):
+def worker( p : Individuo ) -> Individuo:
 
     score = init(
         Game(
@@ -73,7 +74,7 @@ def worker( p ):
 
     return p
 
-def assess( pop ):
+def assess( pop : List[Individuo] ) -> List[Individuo]:
 
     with Pool( min(6, cpu_count()) ) as p:
         result = p.map(worker, pop)
@@ -83,17 +84,13 @@ def assess( pop ):
 
     return result
 
-def selection( pop ):
-    top = pop[:len(pop)//2]
-    return random.choice(top), random.choice(top)
-
-def crossover( p1, p2 ):
+def crossover( p1 : Individuo, p2 : Individuo) -> (List[dict], List[dict]):
     c = random.randint(0, len(p1.genes) - 1)
     g1 = p1.genes[:c] + p2.genes[c:]
     g2 = p2.genes[:c] + p1.genes[c:]
     return g1, g2
 
-def mutation( p ) -> None:
+def mutation( p :Individuo ) -> None:
     for g in p.genes:
         if random.random() < MUTATION_RATE:
             g["action"] = random.choice(ACTIONS)
@@ -102,10 +99,20 @@ def mutation( p ) -> None:
             )
     return p
 
-def tornmend():
-    return 0
+def tournament( pop : List[Individuo], k = 3 ):
+    c = random.sample(pop, k)
+    c.sort(
+        key=lambda x: x.score,
+        reverse=True
+    )
+    return c[0]
 
-def training( m : Mario ) -> Mario:
+def selection( pop : List[Individuo] ) -> (Individuo, Individuo):
+    p1 = tournament( pop )
+    p2 = tournament( pop )
+    return p1, p2
+
+def training( m : Individuo ) -> Individuo:
 
     stagnation = 0
 
@@ -114,9 +121,9 @@ def training( m : Mario ) -> Mario:
     ]
 
     for g in range( GENERATIONS ):
-        
+
         print(f"\nGERACAO {g} ----------------")
-        
+
         pop = assess( pop )
 
         pop.sort(
@@ -130,13 +137,13 @@ def training( m : Mario ) -> Mario:
         new_pop = pop[:ELITE_SIZE]
 
         while len(new_pop) < POP_SIZE - ELITE_SIZE:
-            
+
             if random.random() < EXPLARATION_RATE:
-                
+
                 new_pop.append(
                     individuo()
                 )
-                
+
                 continue
             
             p1, p2 = selection(pop)
@@ -148,7 +155,7 @@ def training( m : Mario ) -> Mario:
             f2 = mutation(
                 Individuo(0, g2)
             )
-            
+
             if ( random.random() < 0.4 ):
                 new_pop.append(f1)
 
@@ -156,5 +163,5 @@ def training( m : Mario ) -> Mario:
                 new_pop.append(f2)
 
         pop = new_pop
-    
+
     return m

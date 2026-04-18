@@ -99,7 +99,7 @@ def mutation( p :Individuo ) -> None:
             )
     return p
 
-def tournament( pop : List[Individuo], k = 3 ):
+def tournament( pop : List[Individuo], k = 3 ) -> Individuo:
     c = random.sample(pop, k)
     c.sort(
         key=lambda x: x.score,

@@ -1,7 +1,7 @@
 
 from core.algoritmo import training
 from core.emulate import init, clear
-from core.models import Mario, Game
+from core.models import *
 
 import json
 

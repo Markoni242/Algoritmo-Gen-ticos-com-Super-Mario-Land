@@ -3,6 +3,7 @@ from typing import List
 
 @dataclass
 class Mario:
+    score: float
     genes: List[dict]
 
 @dataclass

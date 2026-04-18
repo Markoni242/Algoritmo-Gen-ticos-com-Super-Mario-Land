@@ -9,7 +9,7 @@ def reset_inputs( pyboy : PyBoy )  -> None:
     pyboy.send_input(WindowEvent.RELEASE_BUTTON_A)
 
 
-def step( action: str, pyboy : PyBoy ) -> None:
+def step( pyboy : PyBoy, action: str ) -> None:
     if action == "right":
         pyboy.send_input(WindowEvent.PRESS_ARROW_RIGHT)
     elif action == "left":
@@ -107,6 +107,44 @@ def play( pyboy : PyBoy, b : object ) -> float:
 
     return score
 
+def state( g : Game ) -> None:
+    
+    pyboy = start(
+        g.rom,
+        g.show,
+        g.speed,
+        g.state
+    )
+    
+    play(
+        pyboy,
+        g.boot
+    )
+    
+    with open( "./src/state.bin", "wb" ) as file:
+        pyboy.save_state( file )
+
+    stop( pyboy )
+    
 
 def stop( p : PyBoy ) -> None:
     p.stop()
+
+def clear( rom ) -> None:
+    pyboy = PyBoy(rom, window_type="null")
+    pyboy.set_emulation_speed(0)
+
+    for _ in range(100):
+        pyboy.tick()
+
+    pyboy.send_input(WindowEvent.PRESS_BUTTON_START)
+    pyboy.tick()
+    pyboy.send_input(WindowEvent.RELEASE_BUTTON_START)
+
+    for _ in range(30):
+        pyboy.tick()
+    
+    with open( "./src/state.bin", "wb" ) as file:
+        pyboy.save_state( file )
+        
+    stop( pyboy )

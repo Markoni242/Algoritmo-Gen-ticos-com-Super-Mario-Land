@@ -1,44 +1,67 @@
 
-from core.algoritmo import training
-from core.emulate import init, clear
-from core.models import *
+from core.utilitarios import *
 
-import json
+from core.algoritimo import *
 
-def load():
-    with open("backup.json", "r") as f:
-        return json.load(f)
+from core.emulador import *
+
+def resolver( solucao, g : GA ) -> Solucao:
+
+    pop = g.populacao
+    exp = g.exploracao
+    gen = g.geracoes
+    mut = g.mutacao
+    elt = g.elite
+
+    algoritimo = Algoritmo( pop )
+
+    solucao = Solucao(
+        dados
+    )
+
+    for g in range( gen ):
+        print("GERACAO: ", g)
+        solucao.adicionar(
+            agentes = algoritimo.treinar( mut, exp, elt )
+        )
+        salvar( "backup.json", solucao.list )
+
+    return solucao
 
 
-def save(data):
-    with open("backup.json", "w") as f:
-        json.dump(data, f)
+if ( __name__ == "__main__" ):
 
-if __name__ == "__main__":
- 
-    clear("mario.gb")
- 
-    data = load()
+    dados = carregar( "backup.json" )
+
+    pop = []
+
+    if ( len(dados) == 0 ):
+        pop = populacao( 25 )
+    else:
+        pop = dados[ len(dados) - 1 ]
     
-    mario = training (
-        Individuo(
-            score = data["score"],
-            genes = data["genes"]
+#     solucao = resolver(
+#         dados,
+#         GA(
+#            populacao = pop,
+#            exploracao= 0.1,
+#            geracoes = 10,
+#            mutacao = 0.3
+#         )
+#     )
+    
+    solucao = Solucao(
+        dados
+    )
+
+    melhor = solucao.melhor()
+
+    e = Emulador(
+        Jogo(
+
+            jogador = melhor
+
         )
     )
-    
-    save({
-        "score":mario.score,
-        "genes":mario.genes
-    })
 
-    init(
-        Game(
-            boot = mario,
-            speed = 1,
-            show = "SDL2",
-            rom = "mario.gb",
-            state= "./state.bin",
-            assess = False
-        )
-    )
+    e.iniciar()

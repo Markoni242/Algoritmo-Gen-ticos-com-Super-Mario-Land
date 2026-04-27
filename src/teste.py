@@ -1,34 +1,28 @@
 
-from core.algoritmo import training
-from core.emulate import init, clear
-from core.models import *
+from pyboy import PyBoy
 
-import json
-
-def load():
-    with open("backup.json", "r") as f:
-        return json.load(f)
-
-
-def save(data):
-    with open("backup.json", "w") as f:
-        json.dump(data, f)
-
-
-data = load()
-
-mario = Individuo(
-    score = data["score"],
-    genes = data["genes"]
+p = PyBoy(
+    "mario.gb", window_type = "SDL2"
 )
 
-init(
-    Game(
-        boot = mario,
-        speed = 1,
-        show = "SDL2",
-        rom = "mario.gb",
-        state= "./state.bin",
-        assess= False
-    )
-)
+p.set_emulation_speed( 0 )
+
+with open( "state.bin", "rb" ) as f:
+    p.load_state( f )
+
+last_scroll = 0
+acc = 0
+
+while True:
+
+    p.tick()
+    
+    local = p.get_memory_value(0xC202)
+    scroll = p.get_memory_value(0xFF43)
+
+    if ( scroll < last_scroll):
+        acc += 256
+
+    last_scroll = scroll
+
+    print(local + acc + scroll)

@@ -21,7 +21,7 @@ class GA:
     exploracao:float = 0.1
     geracoes:int = 10
     mutacao:float = 0.3
-    elite:int = 3
+    elite:int = 2
 
 
 class Solucao:
@@ -37,12 +37,13 @@ class Solucao:
         m = self.list[0][0]
 
         for p in self.list:
-            
-            for i in p:
-                
-                if m["pontos"] < i["pontos"]:
-                    
-                    m = i 
+
+            i = melhor( p )
+
+            if m["pontos"] < i["pontos"]:
+
+                m = i
+
         return m
 
 
@@ -195,8 +196,6 @@ def mutacao( p, r ):
     return p
 
 
-
-
 def individuo( s : float = 0, g : List[dict] = [] ) -> dict:
 
     if len(g) == 0:
@@ -222,3 +221,15 @@ def populacao( size ):
     return [
         individuo() for _ in range( size )
     ]
+    
+
+def melhor( pop ):
+    
+    m = pop[0]
+    
+    for p in pop:
+        
+        if m["pontos"] < p["pontos"]:
+            m = p
+    
+    return m

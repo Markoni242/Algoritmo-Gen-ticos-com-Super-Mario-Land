@@ -18,12 +18,15 @@ def resolver( solucao, g : GA ) -> Solucao:
     solucao = Solucao(
         dados
     )
-
+        
     for g in range( gen ):
-        print("GERACAO: ", g)
+        
+        print("\nLOOP: ", g)
+
         solucao.adicionar(
-            agentes = algoritimo.treinar( mut, exp, elt )
+            agentes = algoritimo.treinar( mut, exp, elt ) 
         )
+
         salvar( "backup.json", solucao.list )
 
     return solucao
@@ -36,7 +39,7 @@ if ( __name__ == "__main__" ):
     pop = []
 
     if ( len(dados) == 0 ):
-        pop = populacao( 25 )
+        pop = populacao( 75 )
     else:
         pop = dados[ len(dados) - 1 ]
     
@@ -44,38 +47,9 @@ if ( __name__ == "__main__" ):
         dados,
         GA(
            populacao = pop,
-           exploracao= 0.1,
-           geracoes = 1,
-           mutacao = 0.3
+           exploracao= 0.25,
+           geracoes = 350 - len(dados),
+           mutacao = 0.4
         )
     )
     
-    melhor = solucao.melhor()
-
-#     dados = carregar( "melhor.json" )
-#     
-#     melhor = dados["genes"]
-    
-    e = Emulador(
-        Jogo(
-   
-            jogador = melhor["genes"]
-   
-        )
-    )
-   
-    e.iniciar()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
